@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat App</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.5.0/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        .container { display: flex; gap: 20px; }
+        .users { width: 200px; border-right: 1px solid #ccc; padding: 10px; }
+        .chat-box { flex: 1; }
+        .message { margin: 5px 0; padding: 8px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="users">
+        <h3>Your ID: <span id="currentUserId"></span></h3>
+        <input type="number" id="receiverId" placeholder="Recipient ID">
+        <button onclick="loadChat()">Load Chat</button>
+    </div>
+
+    <div class="chat-box">
+        <div id="chatHistory"></div>
+        <input type="text" id="messageInput">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    let currentUserId = Math.floor(Math.random() * 1000); // Генерация случайного ID
+    let receiverId = null;
+    const stompClient = Stomp.over(new SockJS('http://localhost:8080/ws'));
+
+    document.getElementById('currentUserId').textContent = currentUserId;
+
+    stompClient.connect({}, () => {
+        stompClient.subscribe(`/topic/message/${currentUserId}`, (message) => {
+            showMessage(JSON.parse(message.body));
+        });
+    });
+
+    async function loadChat() {
+        receiverId = document.getElementById('receiverId').value;
+        const response = await fetch(`http://localhost:8080/message/${currentUserId}/${receiverId}`);
+        const messages = await response.json();
+
+        document.getElementById('chatHistory').innerHTML = messages
+            .map(msg => `<div class="message">[${msg.timestamp}] ${msg.senderId}: ${msg.content}</div>`)
+            .join('');
+    }
+
+    function sendMessage() {
+        const receiverId = document.getElementById('receiverId').value;
+        if (!receiverId) {
+            alert("Укажите ID получателя!");
+            return;
+        }
+
+        const message = {
+            senderId: currentUserId,
+            receiverId: receiverId, // Исправлено
+            content: document.getElementById('messageInput').value
+        };
+
+        stompClient.send("/app/chat.send", {}, JSON.stringify(message));
+    }
+
+    function showMessage(message) {
+        if (message.senderId == receiverId || message.receiverId == currentUserId) {
+            const div = document.createElement('div');
+            div.className = 'message';
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message.senderId}: ${message.content}`;
+            document.getElementById('chatHistory').appendChild(div);
+        }
+    }
+</script>
+</body>
+</html>
